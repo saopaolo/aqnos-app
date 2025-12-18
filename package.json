@@ -1,0 +1,16 @@
+{
+  "name": "aqnos-mvp",
+  "version": "1.0.0",
+  "description": "Aqnos Forensic Intelligence MVP",
+  "main": "api/collect.js",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "start": "node api/collect.js"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}
