@@ -1,8 +1,15 @@
-// api/collect.js
+import { createClient } from '@supabase/supabase-js'
+
+// These environment variables will be added in your Vercel Dashboard later
+const supabaseUrl = process.env.SUPABASE_URL
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const supabase = createClient(supabaseUrl, supabaseKey)
+
 export default async function handler(req, res) {
-    // 1. Handle CORS (Allow your client's website to send data to your API)
+    // 1. Handle CORS (Cross-Origin Resource Sharing)
+    // This allows client websites to send data to your Vercel API
     res.setHeader('Access-Control-Allow-Credentials', true);
-    res.setHeader('Access-Control-Allow-Origin', '*'); // In production, replace * with the client's domain
+    res.setHeader('Access-Control-Allow-Origin', '*'); 
     res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
     res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
 
@@ -13,41 +20,35 @@ export default async function handler(req, res) {
 
     if (req.method === 'POST') {
         try {
-            const data = JSON.parse(req.body);
-            const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+            // Parse the data sent by your tracking script
+            const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
             
-            // 2. Simple Heuristic Scoring Engine
-            let score = 0;
-            let flags = [];
+            // Get the visitor's IP address (Vercel provides this in the headers)
+            const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
 
-            if (data.is_headless) {
-                score += 50;
-                flags.push('Headless Browser Detected');
-            }
-            if (!data.ua || data.ua.includes('Bot') || data.ua.includes('Crawl')) {
-                score += 40;
-                flags.push('Bot User-Agent');
-            }
-            if (data.vp === '0x0') {
-                score += 30;
-                flags.push('Invisible Viewport');
-            }
+            // Simple Logic: If the script detected a bot, give it a high risk score
+            const riskScore = body.is_bot ? 95 : 5;
 
-            const auditLog = {
-                ...data,
-                ip: ip,
-                risk_score: score,
-                flags: flags,
-                received_at: new Date().toISOString()
-            };
+            // 2. Insert the data into Supabase
+            const { data, error } = await supabase
+                .from('traffic_logs')
+                .insert([
+                    {
+                        domain: body.domain,
+                        path: body.path,
+                        ua: body.ua,
+                        vp: body.vp,
+                        is_bot: body.is_bot,
+                        ip: ip,
+                        risk_score: riskScore
+                    }
+                ]);
 
-            // 3. Output for PoC
-            // In a full build, you would send this to Supabase or Upstash here.
-            console.log('--- NEW FORENSIC CAPTURE ---');
-            console.table(auditLog);
+            if (error) throw error;
 
-            return res.status(200).json({ status: 'success', risk: score });
+            return res.status(200).json({ status: 'success', message: 'Forensic data logged' });
         } catch (err) {
+            console.error('Supabase Error:', err.message);
             return res.status(400).json({ status: 'error', message: err.message });
         }
     }
